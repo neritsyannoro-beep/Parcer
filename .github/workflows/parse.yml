@@ -7,7 +7,12 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch:
   push:
-    branches: [main]
+    # Обе ветки: пока дефолтной остаётся рабочая, расписание живёт на ней.
+    branches:
+      - main
+      - claude/crypto-news-parser-k2g0cq
+    # Только код парсера. Коммит бота с одним feed.json сюда не попадает,
+    # поэтому цикла «сборка → push → сборка» не возникает.
     paths:
       - "cryptoparser/**"
       - ".github/workflows/parse.yml"

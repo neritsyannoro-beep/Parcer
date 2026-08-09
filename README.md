@@ -126,8 +126,18 @@ python -m cryptoparser.main --fixtures tests/fixtures
 
 ## Публикация
 
-1. **Pages:** Settings → Pages → Source: `Deploy from a branch`, ветка `main`,
-   папка `/docs`. Через минуту лента доступна по адресу
+Хостинг раздаёт только статику из `docs/`. Парсер там не запускается — он живёт
+в GitHub Actions, поэтому сборка на хостинге не нужна вообще.
+
+1. **Вариант А, Vercel.** Настройки уже лежат в `vercel.json`: сборка и
+   установка зависимостей отключены, отдаётся папка `docs`. Без этого файла
+   Vercel видит `requirements.txt`, считает проект Python-приложением и падает
+   с `No python entrypoint found`. Если в проекте остались ручные переопределения,
+   сбрось их: Framework Preset — `Other`, Build Command и Install Command пустые,
+   Output Directory — `docs`.
+
+   **Вариант Б, GitHub Pages.** Settings → Pages → Source:
+   `Deploy from a branch`, ветка `main`, папка `/docs`. Адрес получится
    `https://neritsyannoro-beep.github.io/Parcer/`.
 2. **Расписание:** воркфлоу `.github/workflows/parse.yml` запускается каждые
    30 минут. GitHub исполняет cron **только на ветке по умолчанию** — пока код
