@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "//": "Конфиг для случая, когда в Vercel задан Root Directory = docs.",
+  "//2": "Тогда Vercel читает именно этот файл и вообще не видит",
+  "//3": "requirements.txt в корне — значит не пытается собрать Python.",
+
+  "framework": null,
+
+  "headers": [
+    {
+      "//": "Лента обновляется каждые 30 минут — надолго кэшировать нельзя.",
+      "source": "/data/feed.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, s-maxage=60, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.(css|js|webmanifest)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300" }
+      ]
+    }
+  ]
+}
