@@ -109,7 +109,7 @@ API — модель пересобирает порядок и пишет ху�
 ```bash
 git clone https://github.com/neritsyannoro-beep/Parcer.git
 cd Parcer
-pip install -r requirements.txt
+pip install -r requirements/parser.txt
 
 python -m cryptoparser.main          # собрать ленту в docs/data/feed.json
 python -m http.server -d docs 8000   # открыть http://localhost:8000
@@ -129,12 +129,16 @@ python -m cryptoparser.main --fixtures tests/fixtures
 Хостинг раздаёт только статику из `docs/`. Парсер там не запускается — он живёт
 в GitHub Actions, поэтому сборка на хостинге не нужна вообще.
 
-1. **Вариант А, Vercel.** Настройки уже лежат в `vercel.json`: сборка и
-   установка зависимостей отключены, отдаётся папка `docs`. Без этого файла
-   Vercel видит `requirements.txt`, считает проект Python-приложением и падает
-   с `No python entrypoint found`. Если в проекте остались ручные переопределения,
-   сбрось их: Framework Preset — `Other`, Build Command и Install Command пустые,
-   Output Directory — `docs`.
+1. **Вариант А, Vercel.** Работает без настроек в интерфейсе: `vercel.json`
+   указывает отдавать папку `docs`, а собирать нечего.
+
+   Два подводных камня, из-за которых сборка падала:
+   - `requirements.txt` в корне заставлял Vercel считать проект
+     Python-приложением и искать точку входа (`No python entrypoint found`).
+     Поэтому зависимости лежат в `requirements/parser.txt` — они нужны только
+     парсеру в Actions, а хостингу не нужны вообще.
+   - в JSON нет комментариев: ключи вида `"//"` не проходят валидацию схемы
+     Vercel и роняют сборку. Пояснения к конфигу живут здесь, в README.
 
    **Вариант Б, GitHub Pages.** Settings → Pages → Source:
    `Deploy from a branch`, ветка `main`, папка `/docs`. Адрес получится
