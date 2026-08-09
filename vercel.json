@@ -1,33 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": "Здесь нечего собирать. Python в этом репозитории — парсер, который",
-  "//2": "работает в GitHub Actions, а не серверное приложение. Vercel просто",
-  "//3": "раздаёт готовую статику из docs/, поэтому build и install пустые —",
-  "//4": "иначе автодетект видит requirements.txt и ищет точку входа Python.",
-
-  "framework": null,
-  "installCommand": "",
-  "buildCommand": "",
-  "outputDirectory": "docs",
-
-  "headers": [
-    {
-      "//": "Лента обновляется каждые 30 минут — кэшировать её надолго нельзя.",
-      "source": "/data/feed.json",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, s-maxage=60, must-revalidate"
-        }
-      ]
-    },
-    {
-      "//": "Разметку и скрипты держим в кэше недолго: правки видны почти сразу.",
-      "source": "/(.*)\\.(css|js|webmanifest)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=300" }
-      ]
-    }
-  ]
+  "outputDirectory": "docs"
 }

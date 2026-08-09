@@ -37,9 +37,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements/parser.txt
 
       - name: Установить зависимости
-        run: pip install -r requirements.txt
+        run: pip install -r requirements/parser.txt
 
       # База нужна только для состояния между запусками (что уже показывали,
       # снимок списка монет). Она восстановима, поэтому кэш, а не коммит в репо.
