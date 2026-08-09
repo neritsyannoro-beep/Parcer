@@ -191,32 +191,88 @@ def _penalty(text: str) -> tuple[float, list[str]]:
 # ---------------------------------------------------------------- кластеризация сюжетов
 
 
-def _tokens(title: str) -> frozenset[str]:
-    """Значимые токены заголовка с грубой нормализацией числа (etfs -> etf)."""
-    words = re.findall(r"[a-zA-Zа-яА-Я0-9$]{3,}", title.lower())
-    out = set()
-    for w in words:
-        if w in _STOPWORDS:
+# Суммы в заголовках: «$853M», «$853.54 million», «853,5 млрд».
+_MONEY_TOKEN_RE = re.compile(
+    r"\$?\s?(\d[\d.,]*)\s*(k|m|b|t|thousand|million|billion|trillion)\b",
+    re.IGNORECASE,
+)
+# Отдельно — суммы без буквы масштаба: «$1,000,000».
+_PLAIN_MONEY_RE = re.compile(r"\$\s?(\d[\d,]{5,})")
+
+
+def _money_tokens(text: str) -> set[str]:
+    """Канонические токены сумм.
+
+    Одну и ту же сумму издания пишут как `$853M`, `$853.5M` и
+    `$853.54 million` — без приведения к общему виду это три разных слова, и
+    сюжет не склеивается. Приводим всё к миллионам и округляем до двух
+    значащих цифр, чтобы мелкие расхождения в округлении не мешали.
+    """
+    out: set[str] = set()
+    for raw, suffix in _MONEY_TOKEN_RE.findall(text):
+        value = _to_float(raw)
+        if value is None:
             continue
-        if len(w) >= 4 and w.endswith("s") and not w.endswith("ss"):
-            w = w[:-1]
-        out.add(w)
+        millions = value * _MULTIPLIER.get(suffix.lower(), 1.0) / 1e6
+        if millions < 0.5:
+            continue
+        out.add(f"сум{float(f'{millions:.2g}'):g}m")
+    for raw in _PLAIN_MONEY_RE.findall(text):
+        value = _to_float(raw)
+        if value is None or value < 1e6:
+            continue
+        out.add(f"сум{float(f'{value / 1e6:.2g}'):g}m")
+    return out
+
+
+def _tokens(title: str) -> frozenset[str]:
+    """Значимые токены заголовка: слова + канонические суммы.
+
+    Голые числа выбрасываем — это в основном проценты, годы и даты, которые
+    сюжеты не различают, зато создают ложные совпадения.
+    """
+    lowered = title.lower()
+    out = _money_tokens(lowered)
+    for word in re.findall(r"[a-zA-Zа-яА-Я][a-zA-Zа-яА-Я0-9]{2,}", lowered):
+        if word in _STOPWORDS:
+            continue
+        if len(word) >= 4 and word.endswith("s") and not word.endswith("ss"):
+            word = word[:-1]
+        out.add(word)
     return frozenset(out)
 
 
-def _similarity(a: frozenset[str], b: frozenset[str]) -> tuple[float, int]:
-    """Смешанная метрика: Jaccard + коэффициент перекрытия.
+# Минимум общих значимых слов, чтобы вообще рассматривать склейку.
+_MIN_SHARED_TOKENS = 3
 
-    Чистого Jaccard мало: одно и то же событие в разных изданиях называют
-    по-разному и заголовки разной длины, из-за чего знаменатель раздувается.
+
+def _weight(token: str) -> float:
+    """Совпавшая сумма — куда более сильная улика, чем совпавшее слово.
+
+    «Bitcoin» и «ETF» встречаются в половине заголовков и почти ничего не
+    говорят; «$853M» в двух заголовках практически гарантирует одно событие.
+    """
+    return 3.0 if token.startswith("сум") else 1.0
+
+
+def _mass(tokens) -> float:
+    return sum(_weight(t) for t in tokens)
+
+
+def _similarity(a: frozenset[str], b: frozenset[str]) -> tuple[float, int]:
+    """Смешанная метрика: Jaccard + коэффициент перекрытия, оба взвешенные.
+
+    Чистого Jaccard мало: одно событие в разных изданиях называют по-разному, и
+    заголовки бывают очень разной длины, из-за чего знаменатель раздувается.
     Перекрытие (по меньшему из двух наборов) это компенсирует.
     """
-    inter = len(a & b)
-    if inter == 0:
+    common = a & b
+    if not common:
         return 0.0, 0
-    jaccard = inter / len(a | b)
-    overlap = inter / min(len(a), len(b))
-    return 0.5 * jaccard + 0.5 * overlap, inter
+    inter = _mass(common)
+    jaccard = inter / _mass(a | b)
+    overlap = inter / min(_mass(a), _mass(b))
+    return 0.5 * jaccard + 0.5 * overlap, len(common)
 
 
 def cluster_items(items: list[dict]) -> list[list[dict]]:
@@ -228,9 +284,17 @@ def cluster_items(items: list[dict]) -> list[list[dict]]:
     # Сначала самые свежие — представителем кластера станет актуальная запись.
     ordered = sorted(items, key=lambda x: -x["published_ts"])
     clusters: list[list[dict]] = []
-    # Токены каждого участника кластера отдельно: объединять их в одну подпись
-    # нельзя — она разрастается и перестаёт совпадать с новыми заголовками.
+    # Токены каждого участника отдельно: объединять их в одну подпись нельзя —
+    # она разрастается и перестаёт совпадать с новыми заголовками.
     members: list[list[frozenset[str]]] = []
+    # Обратный индекс «токен -> номера кластеров»: сравнивать запись со всеми
+    # кластенами подряд слишком дорого, а кандидаты — только те, с кем есть
+    # хотя бы одно общее слово.
+    index: dict[str, set[int]] = {}
+
+    def register(idx: int, toks: frozenset[str]) -> None:
+        for tok in toks:
+            index.setdefault(tok, set()).add(idx)
 
     for item in ordered:
         toks = _tokens(item["title"])
@@ -239,26 +303,36 @@ def cluster_items(items: list[dict]) -> list[list[dict]]:
             members.append([toks])
             continue
 
-        placed = False
-        for idx, member_tokens in enumerate(members):
-            # Достаточно совпасть с любым из участников — сюжет обрастает
-            # разными формулировками одного события.
-            for sig in member_tokens[:6]:
+        # Сколько слов совпадает с каждым кандидатом — грубый префильтр.
+        shared: dict[int, int] = {}
+        for tok in toks:
+            for idx in index.get(tok, ()):
+                shared[idx] = shared.get(idx, 0) + 1
+
+        # Ищем самый похожий сюжет, а не первый подходящий: при жадном выборе
+        # одно событие расползалось на несколько карточек, потому что запись
+        # цеплялась к раньше созданному, но менее близкому кластеру.
+        best_idx, best_sim = -1, 0.0
+        for idx, count in shared.items():
+            if count < _MIN_SHARED_TOKENS:
+                continue
+            for sig in members[idx][:8]:
                 if len(sig) < 3:
                     continue
                 similarity, inter = _similarity(toks, sig)
                 # Три общих значимых слова — минимум, иначе склеиваются любые
                 # две новости про «bitcoin price».
-                if inter >= 3 and similarity >= config.CLUSTER_SIMILARITY:
-                    clusters[idx].append(item)
-                    member_tokens.append(toks)
-                    placed = True
-                    break
-            if placed:
-                break
-        if not placed:
+                if inter >= _MIN_SHARED_TOKENS and similarity > best_sim:
+                    best_idx, best_sim = idx, similarity
+
+        if best_idx >= 0 and best_sim >= config.CLUSTER_SIMILARITY:
+            clusters[best_idx].append(item)
+            members[best_idx].append(toks)
+            register(best_idx, toks)
+        else:
             clusters.append([item])
             members.append([toks])
+            register(len(clusters) - 1, toks)
 
     return clusters
 
