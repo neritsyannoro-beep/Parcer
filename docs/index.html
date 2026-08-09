@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e14">
+<meta name="description" content="Крипто-новости, отсортированные по интересности: горячие, интересные, средние">
+<title>Crypto Radar — лента крипто-новостей</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <h1>🔥 Crypto Radar</h1>
+    <button id="refresh" class="icon-btn" aria-label="Обновить ленту">
+      <span class="spin-target">↻</span>
+    </button>
+  </div>
+  <p class="meta">
+    <span id="updated">загрузка…</span>
+    <span id="counts" class="counts"></span>
+  </p>
+</header>
+
+<nav class="controls">
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <div class="search-row">
+    <input id="search" type="search" placeholder="Поиск по монете или теме…"
+           autocomplete="off" aria-label="Поиск">
+  </div>
+  <div class="chips" id="chips"></div>
+</nav>
+
+<main id="feed" aria-live="polite">
+  <div class="empty">Загружаю ленту…</div>
+</main>
+
+<footer class="foot">
+  <p>Обновляется автоматически. Ранжирование — эвристики + ончейн-сигналы.</p>
+  <p><a href="https://github.com/neritsyannoro-beep/Parcer">Исходники на GitHub</a></p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+name: Парсинг новостей
+
+on:
+  schedule:
+    # Каждые 30 минут. Внимание: GitHub запускает cron только на ветке
+    # по умолчанию — пока код в отдельной ветке, дёргай запуск вручную.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "cryptoparser/**"
+      - ".github/workflows/parse.yml"
+
+# Два одновременных запуска будут конфликтовать при push — не даём им пересечься.
+concurrency:
+  group: parse-feed
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Установить зависимости
+        run: pip install -r requirements.txt
+
+      # База нужна только для состояния между запусками (что уже показывали,
+      # снимок списка монет). Она восстановима, поэтому кэш, а не коммит в репо.
+      - name: Восстановить базу состояния
+        uses: actions/cache/restore@v4
+        with:
+          path: data/news.db
+          key: news-db-${{ github.run_id }}
+          restore-keys: |
+            news-db-
+
+      - name: Собрать ленту
+        env:
+          # Необязательные ключи. Без них соответствующие модули просто молчат.
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          USE_LLM_RERANK: ${{ vars.USE_LLM_RERANK || '0' }}
+        run: python -m cryptoparser.main
+
+      - name: Сохранить базу состояния
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/news.db
+          key: news-db-${{ github.run_id }}
+
+      - name: Закоммитить ленту
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data/feed.json
+          if git diff --staged --quiet; then
+            echo "Лента не изменилась — коммит не нужен."
+            exit 0
+          fi
+          git commit -m "лента: обновление $(date -u '+%Y-%m-%d %H:%M UTC')"
+          # Между сборкой и push мог пройти другой запуск — подтягиваем его.
+          for i in 1 2 3 4; do
+            if git push; then exit 0; fi
+            echo "push не прошёл, попытка $i"
+            git pull --rebase --autostash || true
+            sleep $((2 ** i))
+          done
+          exit 1

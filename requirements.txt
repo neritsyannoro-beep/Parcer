@@ -1,0 +1,7 @@
+# Минимум для работы парсера
+feedparser>=6.0.10
+requests>=2.31.0
+
+# Только для опционального LLM-переранжирования (USE_LLM_RERANK=1).
+# Ставится отдельно: pip install anthropic
+# anthropic>=0.40.0

@@ -1,0 +1,15 @@
+# Состояние парсера — восстановимо, в репозитории не нужно
+data/*.db
+data/*.db-journal
+docs/data/*.json.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Прочее
+.DS_Store
+.env
